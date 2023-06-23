@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:websocket="http://www.mulesoft.org/schema/mule/websocket" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/websocket http://www.mulesoft.org/schema/mule/websocket/current/mule-websocket.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<websocket:config name="WebSockets_Config_client1" doc:name="WebSockets Config" doc:id="75a0a2aa-f746-4f15-9014-1b6b8449cd86" >
+		<websocket:connection >
+			<websocket:client-settings host="localhost" port="80" basePath="/wsserver" />
+		</websocket:connection>
+	</websocket:config>
+	<http:listener-config name="HTTP_Listener_config1" doc:name="HTTP Listener config" doc:id="dc77d4f3-f24e-4b11-9eaa-acfc24b8e109" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="e315b2e8-9ad1-41c5-a2c1-390dd7b77847" />
+	<flow name="mulesy-websocket-client-connection-Flow" doc:id="fd2fa6d0-636d-4fb1-80dd-d246cc9092e5" >
+		<http:listener doc:name="Listener" doc:id="adfadd56-1734-4a90-b373-b095c0c7db94" config-ref="HTTP_Listener_config1" path="/connect" allowedMethods="POST"/>
+		<set-variable value='#[correlationId ++ "-" ++ attributes.queryParams.client_name]' doc:name="Set Variable socket_id" doc:id="3bd8d400-7d14-48d8-8f82-3b6e05998e05" variableName="socket_id" />
+		<os:store doc:name="Store client socket_id" doc:id="8cfded4a-1008-4d4b-a105-27c7b9fad25e" key='#[attributes.queryParams.client_name]' objectStore="Object_store">
+			<os:value ><![CDATA[#[vars.socket_id]]]></os:value>
+		</os:store>
+		<websocket:open-outbound-socket doc:name="Open outbound socket" doc:id="89f6cd25-a383-413d-9c26-c0ff71296c32" config-ref="WebSockets_Config_client1" path="/matchfeed" socketId="#[vars.socket_id]">
+			<websocket:headers ><![CDATA[#[output application/java
+---
+{
+	"authorization_key" : "admin@12345"
+}]]]></websocket:headers>
+		</websocket:open-outbound-socket>
+		
+		<!-- 
+		<websocket:send doc:name="Send" doc:id="dbd658ba-20bd-4984-9dec-aacf75ef86fa" config-ref="WebSockets_Config_client" socketId="#[vars.socket_id]">
+			<websocket:content ><![CDATA[#[%dw 2.0
+output application/json
+-&#45;&#45;
+{
+	match_id: "12345",
+	subscription:  true	
+}]]]></websocket:content>
+		</websocket:send>
+		 -->
+		<ee:transform doc:name="Transform Message" doc:id="9dbb199e-0186-4a20-a613-ce2c3849af00" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	message: "Connection successful"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="98e588a4-c0fb-451c-91ad-6507420eb655" />
+	</flow>
+	<flow name="mulesy-websocket-client-subscription-Flow" doc:id="a95bb3c7-9eb4-46b0-8e5e-58e40ca29dc2" >
+		<http:listener doc:name="Listener" doc:id="e1cb8d7f-2718-4df1-9f0f-515ca214bb94" config-ref="HTTP_Listener_config1" path="/subscribe" allowedMethods="POST"/>
+		
+		 
+		<os:retrieve doc:name="Retrieve client socket_id" doc:id="30c5ff75-9687-4e1f-84df-7eff67b490f0" key='#[attributes.queryParams.client_name]' target="socket_id" objectStore="Object_store"/>
+		<ee:transform doc:name="Transform Message-subscription" doc:id="3e97d28b-d901-4c49-b4e1-095e6603ebff" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	client_name: attributes.queryParams.client_name,
+	match_id: "12345"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<websocket:send doc:name="Send" doc:id="9e4e508e-4186-457c-a6d3-d53979e85e37" config-ref="WebSockets_Config_client1" socketId="#[vars.socket_id]">
+		</websocket:send>
+		 
+		<ee:transform doc:name="Transform Message" doc:id="443330e0-bb68-4189-80f5-bddd477acac6" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	message: "Subscription successful"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="ae8b189b-6445-449e-a2ad-ba6bdd2bbf11" message='#["subscription Request sent to server for socket id- " ++ vars.socket_id]'/>
+	</flow>
+	<flow name="mulesy-websocket-client-receive-match-feed-Flow" doc:id="c3f77be4-9c11-4f0f-987d-4a4922cd872d" >
+		<websocket:outbound-listener doc:name="On New Outbound Message" doc:id="925e84c1-1e71-496e-8675-e9fa4a5720e3" config-ref="WebSockets_Config_client1" path="/matchfeed"/>
+		<logger level="INFO" doc:name="Logger" doc:id="6d323d54-912f-4cf3-8e2a-7530b8573cd2" message="Client - Received the data from Server payload #[payload] for socket id #[attributes.socketId]"/>
+	</flow>
+</mule>
